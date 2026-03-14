@@ -28,11 +28,11 @@ fi
 # -------------------------------
 
 # fakeTLS secret
-RAND_PART=$(head -c 16 /dev/urandom | xxd -ps -c 256)
+RAND_PART=$(openssl rand -hex 16)
 FAKE_SECRET="ee${RAND_PART}7777772e676f6f676c652e636f6d"
 
 # classic secret (16 hex)
-CLASSIC_SECRET=$(head -c 16 /dev/urandom | xxd -p -c 32)
+CLASSIC_SECRET=$(openssl rand -hex 16 | tr -d '\n')
 
 echo "🔑 FakeTLS secret создан"
 echo "🔑 Classic secret создан"
