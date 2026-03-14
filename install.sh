@@ -1,165 +1,58 @@
 #!/bin/bash
 # ============================================
-#   Telegram MTProto Proxy + Channel TAG
+#   Classic MTProto Proxy (для MTProxyBot)
 # ============================================
 
 set -e
 
-echo ""
-echo "🛡 Установка MTProto Proxy"
-echo "================================"
-echo ""
+echo "Installing classic MTProto proxy..."
 
-# -------------------------------
-# 1. Установка Docker
-# -------------------------------
+# 1. install docker
 if ! command -v docker &>/dev/null; then
-    echo "📦 Устанавливаю Docker..."
-    apt-get update -qq
-    apt-get install -y -qq docker.io >/dev/null 2>&1
-    systemctl enable --now docker >/dev/null 2>&1
-    echo "✅ Docker установлен"
-else
-    echo "✅ Docker уже установлен"
+    apt-get update
+    apt-get install -y docker.io
+    systemctl enable --now docker
 fi
 
-# -------------------------------
-# 2. Генерация секретов
-# -------------------------------
+# 2. generate secret (32 hex)
+SECRET=$(openssl rand -hex 16)
 
-# fakeTLS secret
-RAND_PART=$(openssl rand -hex 16)
-FAKE_SECRET="ee${RAND_PART}7777772e676f6f676c652e636f6d"
+# 3. get server ip
+IP=$(curl -4 -s ifconfig.me)
 
-# classic secret (16 hex)
-CLASSIC_SECRET=$(openssl rand -hex 16 | tr -d '\n')
+echo "Server IP: $IP"
+echo "Secret: $SECRET"
 
-echo "🔑 FakeTLS secret создан"
-echo "🔑 Classic secret создан"
+# 4. download proxy
+mkdir -p /opt/mtproto
+cd /opt/mtproto
 
-# -------------------------------
-# 3. TAG канала (вставить позже)
-# -------------------------------
+curl -s https://core.telegram.org/getProxyConfig -o proxy-multi.conf
+curl -s https://core.telegram.org/getProxySecret -o proxy-secret
 
-TAG=""
+# 5. stop old container
+docker rm -f mtproto 2>/dev/null || true
 
-# -------------------------------
-# 4. Получаем IP сервера
-# -------------------------------
-
-IP=$(curl -4 -s ifconfig.me || curl -4 -s icanhazip.com || hostname -I | awk '{print $1}')
-
-echo "🌐 IP сервера: $IP"
-
-# -------------------------------
-# 5. Создаем папку
-# -------------------------------
-
-mkdir -p /opt/mtg
-
-# -------------------------------
-# 6. FakeTLS конфиг
-# -------------------------------
-
-cat > /opt/mtg/faketls.toml <<EOF
-secret = "${FAKE_SECRET}"
-bind-to = "0.0.0.0:3128"
-prefer-ip = "prefer-ipv4"
-tag = "${TAG}"
-
-concurrency = 8192
-allow-fallback-on-unknown-dc = true
-tolerate-time-skewness = "5s"
-
-[network]
-doh-ip = "1.1.1.1"
-EOF
-
-# -------------------------------
-# 7. Classic конфиг
-# -------------------------------
-
-cat > /opt/mtg/classic.toml <<EOF
-secret = "${CLASSIC_SECRET}"
-bind-to = "0.0.0.0:3128"
-prefer-ip = "prefer-ipv4"
-EOF
-
-# -------------------------------
-# 8. Удаляем старые контейнеры
-# -------------------------------
-
-docker rm -f mtg-fake mtg-classic 2>/dev/null || true
-
-# -------------------------------
-# 9. Запуск FakeTLS прокси
-# -------------------------------
-
-echo "🚀 Запускаю FakeTLS прокси..."
-
+# 6. run proxy
 docker run -d \
---name mtg-fake \
---restart always \
--p 443:3128 \
--v /opt/mtg/faketls.toml:/config.toml:ro \
-nineseconds/mtg:2 run /config.toml >/dev/null
-
-# -------------------------------
-# 10. Запуск Classic прокси
-# -------------------------------
-
-echo "🚀 Запускаю Classic прокси..."
-
-docker run -d \
---name mtg-classic \
---restart always \
--p 8443:3128 \
--v /opt/mtg/classic.toml:/config.toml:ro \
-nineseconds/mtg:2 run /config.toml >/dev/null
-
-sleep 2
-
-# -------------------------------
-# 11. Проверка
-# -------------------------------
-
-if docker ps | grep -q mtg-fake; then
-    echo "✅ FakeTLS прокси запущен"
-else
-    echo "❌ Ошибка запуска FakeTLS"
-    docker logs mtg-fake
-fi
-
-if docker ps | grep -q mtg-classic; then
-    echo "✅ Classic прокси запущен"
-else
-    echo "❌ Ошибка запуска Classic"
-    docker logs mtg-classic
-fi
-
-# -------------------------------
-# 12. Ссылки
-# -------------------------------
-
-USER_LINK="https://t.me/proxy?server=${IP}&port=443&secret=${FAKE_SECRET}"
+  --name mtproto \
+  --restart always \
+  -p 8443:443 \
+  -v /opt/mtproto:/data \
+  telegrammessenger/proxy:latest \
+  -p 443 \
+  -H $SECRET \
+  -C proxy-secret \
+  -c proxy-multi.conf \
+  --aes-pwd proxy-secret proxy-multi.conf
 
 echo ""
-echo "========================================"
-echo "✅ Прокси установлен"
+echo "=================================="
+echo "Classic proxy installed"
 echo ""
-
-echo "👤 Ссылка для пользователей:"
+echo "Send this to MTProxyBot:"
 echo ""
-echo "$USER_LINK"
-echo ""
-
-echo "🤖 Данные для MTProxyBot:"
-echo ""
-echo "IP: $IP"
-echo "PORT: 8443"
-echo "SECRET: $CLASSIC_SECRET"
-echo ""
-
-echo "После получения TAG в MTProxyBot"
-echo "вставь его в переменную TAG и перезапусти контейнер."
-echo "========================================"
+echo "$IP"
+echo "8443"
+echo "$SECRET"
+echo "=================================="
