@@ -32,7 +32,7 @@ RAND_PART=$(head -c 16 /dev/urandom | xxd -ps -c 256)
 FAKE_SECRET="ee${RAND_PART}7777772e676f6f676c652e636f6d"
 
 # classic secret (16 hex)
-CLASSIC_SECRET=$(head -c 16 /dev/urandom | xxd -ps -c 256)
+CLASSIC_SECRET=$(head -c 16 /dev/urandom | xxd -p -c 32)
 
 echo "🔑 FakeTLS secret создан"
 echo "🔑 Classic secret создан"
